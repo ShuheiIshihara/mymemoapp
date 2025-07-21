@@ -9,16 +9,35 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        TabView {
+            MemoListView()
+                .tabItem {
+                    Image(systemName: "doc.text")
+                    Text("メモ")
+                }
+            
+            GroupManageView()
+                .tabItem {
+                    Image(systemName: "folder")
+                    Text("グループ")
+                }
+            
+            TrashView()
+                .tabItem {
+                    Image(systemName: "trash")
+                    Text("ゴミ箱")
+                }
+            
+            SettingsView()
+                .tabItem {
+                    Image(systemName: "gearshape")
+                    Text("設定")
+                }
         }
-        .padding()
     }
 }
 
 #Preview {
     ContentView()
+        .environmentObject(DataManager.shared)
 }
