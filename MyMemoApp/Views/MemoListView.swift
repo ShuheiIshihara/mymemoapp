@@ -46,7 +46,6 @@ struct MemoListView: View {
                         Section("未分類") {
                             ForEach(ungroupedMemos, id: \.id) { memo in
                                 MemoRowView(memo: memo)
-                                    .contentShape(Rectangle())
                                     .onTapGesture {
                                         selectedMemo = memo
                                         showingMemoEditor = true
@@ -65,7 +64,6 @@ struct MemoListView: View {
                                 if expandedGroups.contains(group.id) {
                                     ForEach(groupMemos, id: \.id) { memo in
                                         MemoRowView(memo: memo)
-                                            .contentShape(Rectangle())
                                             .onTapGesture {
                                                 selectedMemo = memo
                                                 showingMemoEditor = true
@@ -148,7 +146,9 @@ struct MemoRowView: View {
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
     
     private func formatDate(_ date: Date) -> String {
