@@ -16,9 +16,9 @@ struct MemoListView: View {
            sort: \Group.createdAt) var groups: [Group]
     
     @State private var searchText = ""
-    @State private var showingMemoEditor = false
     @State private var selectedMemo: Memo?
     @State private var expandedGroups: Set<UUID> = []
+    @State private var isCreatingNewMemo = false
     
     var filteredMemos: [Memo] {
         if searchText.isEmpty {
@@ -35,80 +35,133 @@ struct MemoListView: View {
         filteredMemos.filter { $0.groupId == nil }
     }
     
+    private func handleMemoTap(_ memo: Memo) {
+        print("🟢 [DEBUG] Tapped memo: '\(memo.title)' (ID: \(memo.id))")
+        selectedMemo = memo
+        isCreatingNewMemo = false
+        print("🟢 [DEBUG] Opening existing memo: '\(memo.title)'")
+    }
+    
+    private func handleGroupMemoTap(_ memo: Memo) {
+        print("🔵 [DEBUG] Group memo tapped: '\(memo.title)' (ID: \(memo.id))")
+        selectedMemo = memo
+        isCreatingNewMemo = false
+        print("🔵 [DEBUG] Opening existing memo: '\(memo.title)'")
+    }
+    
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                SearchBar(text: $searchText)
-                    .padding(.horizontal)
-                
-                List {
-                    if !ungroupedMemos.isEmpty {
-                        Section("未分類") {
-                            ForEach(ungroupedMemos, id: \.id) { memo in
-                                MemoRowView(memo: memo)
-                                    .onTapGesture {
-                                        selectedMemo = memo
-                                        showingMemoEditor = true
-                                    }
-                                    .contextMenu {
-                                        contextMenuItems(for: memo)
-                                    }
-                            }
+            contentView
+        }
+    }
+    
+    private var contentView: some View {
+        VStack(spacing: 0) {
+            SearchBar(text: $searchText)
+                .padding(.horizontal)
+            
+            memoListView
+        }
+        .navigationTitle("メモ")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar(content: toolbarContent)
+        .sheet(item: $selectedMemo, onDismiss: onSheetDismissed) { memo in
+//            print("🔴 [DEBUG] Sheet presenting with memo: '\(memo.title)'")
+            MemoEditorView(memo: memo)
+                .environmentObject(dataManager)
+        }
+        .sheet(isPresented: $isCreatingNewMemo, onDismiss: onSheetDismissed) {
+//            print("🔴 [DEBUG] Sheet presenting for new memo")
+            MemoEditorView(memo: nil)
+                .environmentObject(dataManager)
+        }
+    }
+    
+    @ToolbarContentBuilder
+    private func toolbarContent() -> some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button(action: createNewMemo) {
+                Image(systemName: "plus")
+            }
+        }
+    }
+    
+    private var memoListView: some View {
+        List {
+            ungroupedSection
+            groupedSections
+        }
+        .listStyle(InsetGroupedListStyle())
+    }
+    
+    @ViewBuilder
+    private var ungroupedSection: some View {
+        if !ungroupedMemos.isEmpty {
+            Section("未分類") {
+                ForEach(ungroupedMemos, id: \.id) { memo in
+                    MemoRowView(memo: memo)
+                        .onTapGesture {
+                            handleMemoTap(memo)
                         }
-                    }
-                    
-                    ForEach(groups, id: \.id) { group in
-                        let groupMemos = filteredMemos.filter { $0.groupId == group.id }
-                        if !groupMemos.isEmpty {
-                            Section {
-                                if expandedGroups.contains(group.id) {
-                                    ForEach(groupMemos, id: \.id) { memo in
-                                        MemoRowView(memo: memo)
-                                            .onTapGesture {
-                                                selectedMemo = memo
-                                                showingMemoEditor = true
-                                            }
-                                            .contextMenu {
-                                                contextMenuItems(for: memo)
-                                            }
-                                    }
-                                }
-                            } header: {
-                                GroupHeaderView(
-                                    group: group,
-                                    memoCount: groupMemos.count,
-                                    isExpanded: expandedGroups.contains(group.id)
-                                )
-                                .contentShape(Rectangle())
+                        .contextMenu {
+                            contextMenuItems(for: memo)
+                        }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var groupedSections: some View {
+        ForEach(groups, id: \.id) { group in
+            let groupMemos = filteredMemos.filter { $0.groupId == group.id }
+            if !groupMemos.isEmpty {
+                Section {
+                    if expandedGroups.contains(group.id) {
+                        ForEach(groupMemos, id: \.id) { memo in
+                            MemoRowView(memo: memo)
                                 .onTapGesture {
-                                    withAnimation {
-                                        if expandedGroups.contains(group.id) {
-                                            expandedGroups.remove(group.id)
-                                        } else {
-                                            expandedGroups.insert(group.id)
-                                        }
-                                    }
+                                    handleGroupMemoTap(memo)
                                 }
-                            }
+                                .contextMenu {
+                                    contextMenuItems(for: memo)
+                                }
                         }
                     }
-                }
-                .listStyle(InsetGroupedListStyle())
-            }
-            .navigationTitle("メモ")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        selectedMemo = nil
-                        showingMemoEditor = true
-                    }) {
-                        Image(systemName: "plus")
+                } header: {
+                    GroupHeaderView(
+                        group: group,
+                        memoCount: groupMemos.count,
+                        isExpanded: expandedGroups.contains(group.id)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        toggleGroupExpansion(group.id)
                     }
                 }
             }
-            .sheet(isPresented: $showingMemoEditor) {
-                MemoEditorView(memo: selectedMemo)
-                    .environmentObject(dataManager)
+        }
+    }
+    
+    
+    private func createNewMemo() {
+        selectedMemo = nil
+        isCreatingNewMemo = true
+        print("🟢 [DEBUG] Creating new memo")
+    }
+    
+    private func onSheetDismissed() {
+        print("🟡 [DEBUG] Sheet dismissed")
+        selectedMemo = nil
+        isCreatingNewMemo = false
+    }
+    
+    private func toggleGroupExpansion(_ groupId: UUID) {
+        withAnimation {
+            if expandedGroups.contains(groupId) {
+                expandedGroups.remove(groupId)
+            } else {
+                expandedGroups.insert(groupId)
             }
         }
     }
@@ -117,7 +170,7 @@ struct MemoListView: View {
     private func contextMenuItems(for memo: Memo) -> some View {
         Button("編集") {
             selectedMemo = memo
-            showingMemoEditor = true
+            isCreatingNewMemo = false
         }
         
         Button("削除", role: .destructive) {

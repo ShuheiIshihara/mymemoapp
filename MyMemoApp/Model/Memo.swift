@@ -9,7 +9,7 @@ import Foundation
 import SwiftData
 
 @Model
-class Memo {
+class Memo: Identifiable {
     @Attribute(.unique) var id: UUID
     var title: String
     var content: String

@@ -30,11 +30,15 @@ struct MemoEditorView: View {
     }
     
     init(memo: Memo? = nil) {
+        print("🟠 [DEBUG] MemoEditorView init with memo: '\(memo?.title ?? "nil")'")
         self.memo = memo
         if let memo = memo {
             _title = State(initialValue: memo.title)
             _content = State(initialValue: memo.content)
             _selectedGroupId = State(initialValue: memo.groupId)
+            print("🟠 [DEBUG] Editing existing memo: '\(memo.title)'")
+        } else {
+            print("🟠 [DEBUG] Creating new memo")
         }
     }
     
