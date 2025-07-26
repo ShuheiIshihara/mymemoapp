@@ -21,6 +21,11 @@ struct MemoEditorView: View {
     @State private var currentTab: EditorTab = .edit
     @State private var isShowingPreview = false
     
+    // 変更検知用の初期値
+    private let originalTitle: String
+    private let originalContent: String
+    private let originalGroupId: UUID?
+    
     @Query(filter: #Predicate<Group> { $0.deletedAt == nil },
            sort: \Group.createdAt) var groups: [Group]
     
@@ -32,12 +37,29 @@ struct MemoEditorView: View {
     init(memo: Memo? = nil) {
         print("🟠 [DEBUG] MemoEditorView init with memo: '\(memo?.title ?? "nil")'")
         self.memo = memo
+        
         if let memo = memo {
-            _title = State(initialValue: memo.title)
-            _content = State(initialValue: memo.content)
-            _selectedGroupId = State(initialValue: memo.groupId)
+            // 既存メモの場合
+            let memoTitle = memo.title
+            let memoContent = memo.content
+            let memoGroupId = memo.groupId
+            
+            _title = State(initialValue: memoTitle)
+            _content = State(initialValue: memoContent)
+            _selectedGroupId = State(initialValue: memoGroupId)
+            
+            // 初期値を保存（変更検知用）
+            originalTitle = memoTitle
+            originalContent = memoContent
+            originalGroupId = memoGroupId
+            
             print("🟠 [DEBUG] Editing existing memo: '\(memo.title)'")
         } else {
+            // 新規メモの場合
+            originalTitle = ""
+            originalContent = ""
+            originalGroupId = nil
+            
             print("🟠 [DEBUG] Creating new memo")
         }
     }
@@ -123,6 +145,7 @@ struct MemoEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("キャンセル") {
+                        autoSaveIfNeeded()
                         dismiss()
                     }
                 }
@@ -137,6 +160,9 @@ struct MemoEditorView: View {
             .sheet(isPresented: $showingGroupPicker) {
                 GroupPickerView(selectedGroupId: $selectedGroupId)
             }
+            .onDisappear {
+                autoSaveIfNeeded()
+            }
         }
     }
     
@@ -146,6 +172,11 @@ struct MemoEditorView: View {
     }
     
     private func saveMemo() {
+        saveChanges()
+        dismiss()
+    }
+    
+    private func saveChanges() {
         if let existingMemo = memo {
             existingMemo.updateContent(title: title, content: content)
             existingMemo.groupId = selectedGroupId
@@ -155,7 +186,27 @@ struct MemoEditorView: View {
                                      groupId: selectedGroupId)
         }
         dataManager.saveContext()
-        dismiss()
+        print("💾 [DEBUG] Changes saved")
+    }
+    
+    private func hasChanges() -> Bool {
+        return title != originalTitle || 
+               content != originalContent || 
+               selectedGroupId != originalGroupId
+    }
+    
+    private func shouldAutoSave() -> Bool {
+        // 変更があり、かつ空のメモではない場合に自動保存
+        return hasChanges() && !(title.isEmpty && content.isEmpty)
+    }
+    
+    private func autoSaveIfNeeded() {
+        if shouldAutoSave() {
+            print("🔄 [DEBUG] Auto-saving changes on dismiss")
+            saveChanges()
+        } else {
+            print("🚫 [DEBUG] No auto-save needed")
+        }
     }
 }
 
