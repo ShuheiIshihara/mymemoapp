@@ -22,6 +22,7 @@ struct MemoEditorView: View {
     @State private var currentTab: EditorTab = .edit
     @State private var isShowingPreview = false
     @State private var cursorPosition: Int = 0
+    @State private var isCancelled = false
     
     // 変更検知用の初期値
     private let originalTitle: String
@@ -152,7 +153,7 @@ struct MemoEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("キャンセル") {
-                        autoSaveIfNeeded()
+                        isCancelled = true
                         dismiss()
                     }
                 }
@@ -208,6 +209,11 @@ struct MemoEditorView: View {
     }
     
     private func autoSaveIfNeeded() {
+        if isCancelled {
+            print("❌ [DEBUG] Auto-save skipped due to cancel")
+            return
+        }
+        
         if shouldAutoSave() {
             print("🔄 [DEBUG] Auto-saving changes on dismiss")
             saveChanges()
