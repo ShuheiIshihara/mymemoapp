@@ -110,6 +110,12 @@ struct MemoEditorView: View {
                         
                         Divider()
                         
+                        // Markdownツールバー
+                        MarkdownToolbar(content: $content)
+                        
+                        Divider()
+                            .padding(.horizontal)
+                        
                         // 本文入力
                         TextEditor(text: $content)
                             .font(.system(.body, design: .default))
@@ -263,6 +269,89 @@ struct GroupPickerView: View {
             }
         }
     }
+}
+
+struct MarkdownToolbar: View {
+    @Binding var content: String
+    
+    private let markdownButtons = [
+        MarkdownButton(symbol: "bold", title: "太字", prefix: "**", suffix: "**"),
+        MarkdownButton(symbol: "italic", title: "斜体", prefix: "*", suffix: "*"),
+        MarkdownButton(symbol: "number", title: "見出し", prefix: "# ", suffix: ""),
+        MarkdownButton(symbol: "list.bullet", title: "リスト", prefix: "- ", suffix: ""),
+        MarkdownButton(symbol: "list.number", title: "番号", prefix: "1. ", suffix: ""),
+        MarkdownButton(symbol: "link", title: "リンク", prefix: "[", suffix: "](url)"),
+        MarkdownButton(symbol: "doc.text", title: "コード", prefix: "`", suffix: "`"),
+        MarkdownButton(symbol: "quote.bubble", title: "引用", prefix: "> ", suffix: "")
+    ]
+    
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(markdownButtons, id: \.symbol) { button in
+                    Button(action: {
+                        insertMarkdown(button)
+                    }) {
+                        VStack(spacing: 2) {
+                            Image(systemName: button.symbol)
+                                .font(.system(size: 16, weight: .medium))
+                            Text(button.title)
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.blue)
+                        .frame(width: 44, height: 36)
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+        .frame(height: 50)
+        .background(Color(.systemGray6))
+    }
+    
+    private func insertMarkdown(_ button: MarkdownButton) {
+        if button.prefix == "# " || button.prefix == "- " || button.prefix == "1. " || button.prefix == "> " {
+            // 行の先頭に挿入するタイプ
+            insertAtLineStart(button.prefix)
+        } else {
+            // 選択テキストを囲むタイプ
+            wrapSelectedText(prefix: button.prefix, suffix: button.suffix)
+        }
+    }
+    
+    private func insertAtLineStart(_ prefix: String) {
+        if content.isEmpty {
+            content = prefix
+        } else {
+            // 最後の行が空でない場合は新しい行を追加
+            if !content.hasSuffix("\n") {
+                content += "\n"
+            }
+            content += prefix
+        }
+    }
+    
+    private func wrapSelectedText(prefix: String, suffix: String) {
+        if content.isEmpty {
+            content = prefix + suffix
+        } else {
+            // カーソル位置にMarkdown記法を挿入（末尾に追加）
+            if prefix == "[" && suffix == "](url)" {
+                content += prefix + "リンクテキスト" + suffix
+            } else if prefix == "`" && suffix == "`" {
+                content += prefix + "コード" + suffix
+            } else {
+                content += prefix + "テキスト" + suffix
+            }
+        }
+    }
+}
+
+struct MarkdownButton {
+    let symbol: String
+    let title: String
+    let prefix: String
+    let suffix: String
 }
 
 struct MarkdownPreviewView: View {
