@@ -339,6 +339,7 @@ struct MarkdownToolbar: View {
         MarkdownButton(symbol: "arrow.left.square", title: "左indent", prefix: "indent_left", suffix: ""),
         MarkdownButton(symbol: "link", title: "リンク", prefix: "[", suffix: "](url)"),
         MarkdownButton(symbol: "doc.text", title: "コード", prefix: "`", suffix: "`"),
+        MarkdownButton(symbol: "curlybraces", title: "ブロック", prefix: "code_block", suffix: ""),
         MarkdownButton(symbol: "quote.bubble", title: "引用", prefix: "> ", suffix: "")
     ]
     
@@ -371,6 +372,8 @@ struct MarkdownToolbar: View {
             increaseIndent()
         } else if button.prefix == "indent_left" {
             decreaseIndent()
+        } else if button.prefix == "code_block" {
+            insertCodeBlock()
         } else if button.prefix == "# " || button.prefix == "- " || button.prefix == "1. " || button.prefix == "> " {
             // 行の先頭に挿入するタイプ
             insertAtLineStart(button.prefix)
@@ -464,6 +467,21 @@ struct MarkdownToolbar: View {
         }
     }
     
+    private func insertCodeBlock() {
+        if content.isEmpty {
+            content = "```\nコード\n```"
+            cursorPosition = 7 // "```\n"の後にカーソルを配置
+        } else {
+            // 最後の行が空でない場合は新しい行を追加
+            if !content.hasSuffix("\n") {
+                content += "\n"
+            }
+            let insertText = "```\nコード\n```"
+            content += insertText
+            cursorPosition = content.count - insertText.count + 4 // "```\n"の後にカーソルを配置
+        }
+    }
+    
     private func getCurrentLineIndex() -> Int {
         let lines = content.components(separatedBy: .newlines)
         var characterCount = 0
@@ -519,6 +537,16 @@ struct MarkdownPreviewView: View {
                             .padding(8)
                             .background(Color.gray.opacity(0.1))
                             .cornerRadius(4)
+                    case .codeBlock:
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(element.content)
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundColor(.primary)
+                        }
+                        .padding(12)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     case .inlineCode:
                         Text(element.content)
                             .font(.system(.body, design: .monospaced))
@@ -584,12 +612,39 @@ struct MarkdownPreviewView: View {
     private func parseMarkdown(_ text: String) -> [MarkdownElement] {
         let lines = text.components(separatedBy: .newlines)
         var elements: [MarkdownElement] = []
+        var i = 0
         
-        for line in lines {
+        while i < lines.count {
+            let line = lines[i]
             let trimmedLine = line.trimmingCharacters(in: .whitespaces)
             let indentLevel = calculateIndentLevel(line)
             
-            if trimmedLine.hasPrefix("### ") {
+            // コードブロック（```で始まる複数行）の処理
+            if trimmedLine == "```" || trimmedLine.hasPrefix("```") {
+                var codeContent = ""
+                var language = ""
+                
+                // 言語指定がある場合は取得
+                if trimmedLine.count > 3 {
+                    language = String(trimmedLine.dropFirst(3))
+                }
+                
+                i += 1 // 次の行に進む
+                
+                // 終了の```まで収集
+                while i < lines.count {
+                    if lines[i].trimmingCharacters(in: .whitespaces) == "```" {
+                        break
+                    }
+                    if !codeContent.isEmpty {
+                        codeContent += "\n"
+                    }
+                    codeContent += lines[i]
+                    i += 1
+                }
+                
+                elements.append(MarkdownElement(type: .codeBlock, content: codeContent, indentLevel: 0))
+            } else if trimmedLine.hasPrefix("### ") {
                 elements.append(MarkdownElement(type: .heading3, content: String(trimmedLine.dropFirst(4)), indentLevel: 0))
             } else if trimmedLine.hasPrefix("## ") {
                 elements.append(MarkdownElement(type: .heading2, content: String(trimmedLine.dropFirst(3)), indentLevel: 0))
@@ -608,6 +663,8 @@ struct MarkdownPreviewView: View {
                 // インライン記法の処理
                 elements.append(contentsOf: parseInlineMarkdown(trimmedLine, indentLevel: 0))
             }
+            
+            i += 1
         }
         
         return elements
@@ -666,7 +723,7 @@ struct MarkdownElement {
     enum MarkdownType {
         case heading1, heading2, heading3
         case bold, italic
-        case code, inlineCode
+        case code, inlineCode, codeBlock
         case bulletList, numberedList
         case quote
         case paragraph
