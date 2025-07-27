@@ -84,3 +84,6 @@ fastlane/test_output
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Claude Code settings
+.claude/settings.local.json
