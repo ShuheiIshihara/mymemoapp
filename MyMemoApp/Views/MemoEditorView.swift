@@ -38,7 +38,6 @@ struct MemoEditorView: View {
     }
     
     init(memo: Memo? = nil) {
-        print("🟠 [DEBUG] MemoEditorView init with memo: '\(memo?.title ?? "nil")'")
         self.memo = memo
         
         if let memo = memo {
@@ -55,15 +54,11 @@ struct MemoEditorView: View {
             originalTitle = memoTitle
             originalContent = memoContent
             originalGroupId = memoGroupId
-            
-            print("🟠 [DEBUG] Editing existing memo: '\(memo.title)'")
         } else {
             // 新規メモの場合
             originalTitle = ""
             originalContent = ""
             originalGroupId = nil
-            
-            print("🟠 [DEBUG] Creating new memo")
         }
     }
     
@@ -194,7 +189,6 @@ struct MemoEditorView: View {
                                      groupId: selectedGroupId)
         }
         dataManager.saveContext()
-        print("💾 [DEBUG] Changes saved")
     }
     
     private func hasChanges() -> Bool {
@@ -210,15 +204,11 @@ struct MemoEditorView: View {
     
     private func autoSaveIfNeeded() {
         if isCancelled {
-            print("❌ [DEBUG] Auto-save skipped due to cancel")
             return
         }
         
         if shouldAutoSave() {
-            print("🔄 [DEBUG] Auto-saving changes on dismiss")
             saveChanges()
-        } else {
-            print("🚫 [DEBUG] No auto-save needed")
         }
     }
 }
@@ -294,17 +284,13 @@ struct CursorAwareTextEditor: UIViewRepresentable {
     
     func updateUIView(_ uiView: UITextView, context: Context) {
         if uiView.text != text {
-            let previousCursorPosition = uiView.selectedRange.location
-            print("🔴 [DEBUG] Text changed. Previous cursor: \(previousCursorPosition), New cursorPosition: \(cursorPosition)")
             uiView.text = text
             
             // カーソル位置を復元（非同期で実行して確実に反映）
             let newPosition = min(cursorPosition, text.count)
-            print("🔴 [DEBUG] Setting cursor to: \(newPosition)")
             
             DispatchQueue.main.async {
                 uiView.selectedRange = NSRange(location: newPosition, length: 0)
-                print("🔴 [DEBUG] Cursor actually set to: \(uiView.selectedRange.location)")
             }
         }
     }
@@ -326,9 +312,7 @@ struct CursorAwareTextEditor: UIViewRepresentable {
         }
         
         func textViewDidChangeSelection(_ textView: UITextView) {
-            let newPosition = textView.selectedRange.location
-            print("🟢 [DEBUG] textViewDidChangeSelection: \(parent.cursorPosition) -> \(newPosition)")
-            parent.cursorPosition = newPosition
+            parent.cursorPosition = textView.selectedRange.location
         }
     }
 }
@@ -376,9 +360,6 @@ struct MarkdownToolbar: View {
     }
     
     private func insertMarkdown(_ button: MarkdownButton) {
-        print("🔵 [DEBUG] insertMarkdown called for: \(button.title) (prefix: \(button.prefix))")
-        print("🔵 [DEBUG] Current cursor position: \(cursorPosition)")
-        
         if button.prefix == "indent_right" {
             increaseIndent()
         } else if button.prefix == "indent_left" {
@@ -392,8 +373,6 @@ struct MarkdownToolbar: View {
             // 選択テキストを囲むタイプ
             wrapSelectedText(prefix: button.prefix, suffix: button.suffix)
         }
-        
-        print("🔵 [DEBUG] After insertMarkdown, cursor position: \(cursorPosition)")
     }
     
     private func insertAtLineStart(_ prefix: String) {
@@ -437,11 +416,9 @@ struct MarkdownToolbar: View {
     }
     
     private func wrapSelectedText(prefix: String, suffix: String) {
-        print("🟡 [DEBUG] wrapSelectedText called. Current cursor: \(cursorPosition)")
         if content.isEmpty {
             content = prefix + suffix
             cursorPosition = prefix.count
-            print("🟡 [DEBUG] Empty content. New cursor: \(cursorPosition)")
         } else {
             // カーソル位置にMarkdown記法を挿入
             let insertPosition = min(cursorPosition, content.count)
@@ -464,7 +441,6 @@ struct MarkdownToolbar: View {
             
             content = beforeCursor + insertText + afterCursor
             let newCursorPosition = insertPosition + newCursorOffset
-            print("🟡 [DEBUG] Inserting '\(insertText)' at position \(insertPosition). New cursor: \(newCursorPosition)")
             cursorPosition = newCursorPosition
         }
     }
@@ -527,11 +503,9 @@ struct MarkdownToolbar: View {
     }
     
     private func insertCodeBlock() {
-        print("🟠 [DEBUG] insertCodeBlock called. Current cursor: \(cursorPosition)")
         if content.isEmpty {
             content = "```\nコード\n```"
             cursorPosition = 4 // "```\n"の後にカーソルを配置
-            print("🟠 [DEBUG] Empty content. New cursor: \(cursorPosition)")
         } else {
             // カーソル位置にコードブロックを挿入
             let insertPosition = min(cursorPosition, content.count)
@@ -552,7 +526,6 @@ struct MarkdownToolbar: View {
             // "```\n"の後（"コード"の位置）にカーソルを配置
             let newlineOffset = beforeCursor.hasSuffix("\n") ? 0 : 1
             let newCursorPosition = insertPosition + newlineOffset + 4 // "```\n"の長さ
-            print("🟠 [DEBUG] Inserting code block at position \(insertPosition). New cursor: \(newCursorPosition)")
             cursorPosition = newCursorPosition
         }
     }
