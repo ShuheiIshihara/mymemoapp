@@ -16,6 +16,7 @@ struct MemoListView: View {
            sort: \Group.createdAt) var groups: [Group]
     
     @State private var searchText = ""
+    @State private var debouncedSearchText = ""
     @State private var selectedMemo: Memo?
     @State private var expandedGroups: Set<UUID> = []
     @State private var isCreatingNewMemo = false
@@ -75,6 +76,9 @@ struct MemoListView: View {
             MemoEditorView(memo: nil)
                 .environmentObject(dataManager)
         }
+        // .onChange(of: searchText) { _, newValue in
+        //     debounceSearch(newValue)
+        // }
     }
     
     @ToolbarContentBuilder
@@ -88,10 +92,53 @@ struct MemoListView: View {
     
     private var memoListView: some View {
         List {
-            ungroupedSection
-            groupedSections
+            // 検索結果件数表示
+            if !searchText.isEmpty {
+                searchResultHeader
+            }
+            
+            // 検索結果が空の場合
+            if !searchText.isEmpty && filteredMemos.isEmpty {
+                emptySearchResultView
+            } else {
+                ungroupedSection
+                groupedSections
+            }
         }
         .listStyle(InsetGroupedListStyle())
+    }
+    
+    private var searchResultHeader: some View {
+        Section {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                Text("検索結果: \(filteredMemos.count)件")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+            .padding(.vertical, 4)
+        }
+    }
+    
+    private var emptySearchResultView: some View {
+        Section {
+            VStack(spacing: 12) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 48))
+                    .foregroundColor(.secondary)
+                Text("「\(searchText)」に一致するメモが見つかりません")
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                Text("別のキーワードで検索してみてください")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 32)
+        }
     }
     
     @ViewBuilder
@@ -99,7 +146,7 @@ struct MemoListView: View {
         if !ungroupedMemos.isEmpty {
             Section("未分類") {
                 ForEach(ungroupedMemos, id: \.id) { memo in
-                    MemoRowView(memo: memo)
+                    MemoRowView(memo: memo, searchText: searchText)
                         .onTapGesture {
                             handleMemoTap(memo)
                         }
@@ -119,7 +166,7 @@ struct MemoListView: View {
                 Section {
                     if expandedGroups.contains(group.id) {
                         ForEach(groupMemos, id: \.id) { memo in
-                            MemoRowView(memo: memo)
+                            MemoRowView(memo: memo, searchText: searchText)
                                 .onTapGesture {
                                     handleGroupMemoTap(memo)
                                 }
@@ -181,18 +228,30 @@ struct MemoListView: View {
 
 struct MemoRowView: View {
     let memo: Memo
+    let searchText: String
+    
+    init(memo: Memo, searchText: String = "") {
+        self.memo = memo
+        self.searchText = searchText
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(memo.title.isEmpty ? "無題のメモ" : memo.title)
-                .font(.headline)
-                .lineLimit(1)
+            highlightedText(
+                text: memo.title.isEmpty ? "無題のメモ" : memo.title,
+                searchText: searchText,
+                font: .headline
+            )
+            .lineLimit(1)
             
             if !memo.content.isEmpty {
-                Text(memo.content)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
+                highlightedText(
+                    text: memo.content,
+                    searchText: searchText,
+                    font: .caption
+                )
+                .foregroundColor(.secondary)
+                .lineLimit(2)
             }
             
             Text(formatDate(memo.updatedAt))
@@ -203,6 +262,67 @@ struct MemoRowView: View {
         .padding(.vertical, 2)
         .contentShape(Rectangle())
     }
+    
+    @ViewBuilder
+    private func highlightedText(text: String, searchText: String, font: Font) -> some View {
+        if searchText.isEmpty || !text.lowercased().contains(searchText.lowercased()) {
+            Text(text)
+                .font(font)
+        } else {
+            // 安全なハイライト実装
+            createHighlightedView(text: text, searchText: searchText, font: font)
+        }
+    }
+    
+    @ViewBuilder
+    private func createHighlightedView(text: String, searchText: String, font: Font) -> some View {
+        let parts = splitTextForHighlight(text: text, searchText: searchText)
+        
+        if parts.isEmpty {
+            Text(text).font(font)
+        } else {
+            HStack(spacing: 0) {
+                ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                    Text(part.text)
+                        .background(part.isHighlight ? Color.yellow.opacity(0.7) : Color.clear)
+                }
+            }
+            .font(font)
+        }
+    }
+    
+    private func splitTextForHighlight(text: String, searchText: String) -> [(text: String, isHighlight: Bool)] {
+        guard !searchText.isEmpty else { return [(text, false)] }
+        
+        let lowercased = text.lowercased()
+        let searchLower = searchText.lowercased()
+        var result: [(String, Bool)] = []
+        var currentIndex = text.startIndex
+        
+        while currentIndex < text.endIndex {
+            if let range = lowercased.range(of: searchLower, range: currentIndex..<text.endIndex) {
+                // 検索語の前の部分
+                if currentIndex < range.lowerBound {
+                    let beforeText = String(text[currentIndex..<range.lowerBound])
+                    result.append((beforeText, false))
+                }
+                
+                // 検索語の部分
+                let matchText = String(text[range])
+                result.append((matchText, true))
+                
+                currentIndex = range.upperBound
+            } else {
+                // 残りの部分
+                let remainingText = String(text[currentIndex..<text.endIndex])
+                result.append((remainingText, false))
+                break
+            }
+        }
+        
+        return result
+    }
+    
     
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
@@ -249,6 +369,7 @@ struct SearchBar: View {
         .padding(.vertical, 8)
     }
 }
+
 
 #Preview {
     MemoListView()
