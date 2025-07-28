@@ -295,11 +295,17 @@ struct CursorAwareTextEditor: UIViewRepresentable {
     func updateUIView(_ uiView: UITextView, context: Context) {
         if uiView.text != text {
             let previousCursorPosition = uiView.selectedRange.location
+            print("🔴 [DEBUG] Text changed. Previous cursor: \(previousCursorPosition), New cursorPosition: \(cursorPosition)")
             uiView.text = text
             
-            // カーソル位置を復元
+            // カーソル位置を復元（非同期で実行して確実に反映）
             let newPosition = min(cursorPosition, text.count)
-            uiView.selectedRange = NSRange(location: newPosition, length: 0)
+            print("🔴 [DEBUG] Setting cursor to: \(newPosition)")
+            
+            DispatchQueue.main.async {
+                uiView.selectedRange = NSRange(location: newPosition, length: 0)
+                print("🔴 [DEBUG] Cursor actually set to: \(uiView.selectedRange.location)")
+            }
         }
     }
     
@@ -320,7 +326,9 @@ struct CursorAwareTextEditor: UIViewRepresentable {
         }
         
         func textViewDidChangeSelection(_ textView: UITextView) {
-            parent.cursorPosition = textView.selectedRange.location
+            let newPosition = textView.selectedRange.location
+            print("🟢 [DEBUG] textViewDidChangeSelection: \(parent.cursorPosition) -> \(newPosition)")
+            parent.cursorPosition = newPosition
         }
     }
 }
@@ -368,6 +376,9 @@ struct MarkdownToolbar: View {
     }
     
     private func insertMarkdown(_ button: MarkdownButton) {
+        print("🔵 [DEBUG] insertMarkdown called for: \(button.title) (prefix: \(button.prefix))")
+        print("🔵 [DEBUG] Current cursor position: \(cursorPosition)")
+        
         if button.prefix == "indent_right" {
             increaseIndent()
         } else if button.prefix == "indent_left" {
@@ -381,32 +392,80 @@ struct MarkdownToolbar: View {
             // 選択テキストを囲むタイプ
             wrapSelectedText(prefix: button.prefix, suffix: button.suffix)
         }
+        
+        print("🔵 [DEBUG] After insertMarkdown, cursor position: \(cursorPosition)")
     }
     
     private func insertAtLineStart(_ prefix: String) {
         if content.isEmpty {
             content = prefix
+            cursorPosition = prefix.count
         } else {
-            // 最後の行が空でない場合は新しい行を追加
-            if !content.hasSuffix("\n") {
-                content += "\n"
+            // カーソル位置から現在の行の開始位置を探す
+            let lines = content.components(separatedBy: .newlines)
+            let currentLineIndex = getCurrentLineIndex()
+            
+            if currentLineIndex < lines.count {
+                // 現在の行の開始位置を計算
+                var lineStartPosition = 0
+                for i in 0..<currentLineIndex {
+                    lineStartPosition += lines[i].count + 1 // +1 for newline
+                }
+                
+                // 現在の行に既に該当するprefixがある場合は何もしない
+                let currentLine = lines[currentLineIndex]
+                if currentLine.trimmingCharacters(in: .whitespaces).hasPrefix(prefix.trimmingCharacters(in: .whitespaces)) {
+                    return
+                }
+                
+                // 行の開始位置にprefixを挿入
+                let beforeCursor = String(content.prefix(lineStartPosition))
+                let afterCursor = String(content.suffix(from: content.index(content.startIndex, offsetBy: lineStartPosition)))
+                
+                content = beforeCursor + prefix + afterCursor
+                cursorPosition = lineStartPosition + prefix.count
+            } else {
+                // 新しい行として追加
+                if !content.hasSuffix("\n") {
+                    content += "\n"
+                }
+                let insertPosition = content.count
+                content += prefix
+                cursorPosition = insertPosition + prefix.count
             }
-            content += prefix
         }
     }
     
     private func wrapSelectedText(prefix: String, suffix: String) {
+        print("🟡 [DEBUG] wrapSelectedText called. Current cursor: \(cursorPosition)")
         if content.isEmpty {
             content = prefix + suffix
+            cursorPosition = prefix.count
+            print("🟡 [DEBUG] Empty content. New cursor: \(cursorPosition)")
         } else {
-            // カーソル位置にMarkdown記法を挿入（末尾に追加）
+            // カーソル位置にMarkdown記法を挿入
+            let insertPosition = min(cursorPosition, content.count)
+            let beforeCursor = String(content.prefix(insertPosition))
+            let afterCursor = String(content.suffix(from: content.index(content.startIndex, offsetBy: insertPosition)))
+            
+            var insertText: String
+            var newCursorOffset: Int
+            
             if prefix == "[" && suffix == "](url)" {
-                content += prefix + "リンクテキスト" + suffix
+                insertText = prefix + "リンクテキスト" + suffix
+                newCursorOffset = prefix.count // "["の後にカーソルを配置
             } else if prefix == "`" && suffix == "`" {
-                content += prefix + "コード" + suffix
+                insertText = prefix + "コード" + suffix
+                newCursorOffset = prefix.count // "`"の後にカーソルを配置
             } else {
-                content += prefix + "テキスト" + suffix
+                insertText = prefix + "テキスト" + suffix
+                newCursorOffset = prefix.count // prefixの後にカーソルを配置
             }
+            
+            content = beforeCursor + insertText + afterCursor
+            let newCursorPosition = insertPosition + newCursorOffset
+            print("🟡 [DEBUG] Inserting '\(insertText)' at position \(insertPosition). New cursor: \(newCursorPosition)")
+            cursorPosition = newCursorPosition
         }
     }
     
@@ -468,17 +527,33 @@ struct MarkdownToolbar: View {
     }
     
     private func insertCodeBlock() {
+        print("🟠 [DEBUG] insertCodeBlock called. Current cursor: \(cursorPosition)")
         if content.isEmpty {
             content = "```\nコード\n```"
-            cursorPosition = 7 // "```\n"の後にカーソルを配置
+            cursorPosition = 4 // "```\n"の後にカーソルを配置
+            print("🟠 [DEBUG] Empty content. New cursor: \(cursorPosition)")
         } else {
-            // 最後の行が空でない場合は新しい行を追加
-            if !content.hasSuffix("\n") {
-                content += "\n"
+            // カーソル位置にコードブロックを挿入
+            let insertPosition = min(cursorPosition, content.count)
+            let beforeCursor = String(content.prefix(insertPosition))
+            let afterCursor = String(content.suffix(from: content.index(content.startIndex, offsetBy: insertPosition)))
+            
+            var insertText = "```\nコード\n```"
+            
+            // カーソル位置が行の途中の場合は前後に改行を追加
+            if insertPosition > 0 && !beforeCursor.hasSuffix("\n") {
+                insertText = "\n" + insertText
             }
-            let insertText = "```\nコード\n```"
-            content += insertText
-            cursorPosition = content.count - insertText.count + 4 // "```\n"の後にカーソルを配置
+            if !afterCursor.hasPrefix("\n") && !afterCursor.isEmpty {
+                insertText = insertText + "\n"
+            }
+            
+            content = beforeCursor + insertText + afterCursor
+            // "```\n"の後（"コード"の位置）にカーソルを配置
+            let newlineOffset = beforeCursor.hasSuffix("\n") ? 0 : 1
+            let newCursorPosition = insertPosition + newlineOffset + 4 // "```\n"の長さ
+            print("🟠 [DEBUG] Inserting code block at position \(insertPosition). New cursor: \(newCursorPosition)")
+            cursorPosition = newCursorPosition
         }
     }
     
