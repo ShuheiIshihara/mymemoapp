@@ -22,6 +22,7 @@ struct MemoEditorView: View {
     @State private var currentTab: EditorTab = .edit
     @State private var isShowingPreview = false
     @State private var cursorPosition: Int = 0
+    @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @State private var isCancelled = false
     
     // 変更検知用の初期値
@@ -109,13 +110,13 @@ struct MemoEditorView: View {
                         Divider()
                         
                         // Markdownツールバー
-                        MarkdownToolbar(content: $content, cursorPosition: $cursorPosition)
+                        MarkdownToolbar(content: $content, cursorPosition: $cursorPosition, selectedRange: $selectedRange)
                         
                         Divider()
                             .padding(.horizontal)
                         
                         // 本文入力
-                        CursorAwareTextEditor(text: $content, cursorPosition: $cursorPosition)
+                        CursorAwareTextEditor(text: $content, cursorPosition: $cursorPosition, selectedRange: $selectedRange)
                             .padding(.horizontal)
                     }
                     .tag(EditorTab.edit)
@@ -133,7 +134,7 @@ struct MemoEditorView: View {
                         } else {
                             Text("プレビューするコンテンツがありません")
                                 .foregroundColor(.secondary)
-                                .italic()
+                                .font(.system(.body).italic())
                         }
                         
                         Spacer()
@@ -271,6 +272,7 @@ struct GroupPickerView: View {
 struct CursorAwareTextEditor: UIViewRepresentable {
     @Binding var text: String
     @Binding var cursorPosition: Int
+    @Binding var selectedRange: NSRange
     
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
@@ -286,11 +288,14 @@ struct CursorAwareTextEditor: UIViewRepresentable {
         if uiView.text != text {
             uiView.text = text
             
-            // カーソル位置を復元（非同期で実行して確実に反映）
-            let newPosition = min(cursorPosition, text.count)
+            // 選択範囲を復元（非同期で実行して確実に反映）
+            let newRange = NSRange(
+                location: min(selectedRange.location, text.count),
+                length: min(selectedRange.length, max(0, text.count - selectedRange.location))
+            )
             
             DispatchQueue.main.async {
-                uiView.selectedRange = NSRange(location: newPosition, length: 0)
+                uiView.selectedRange = newRange
             }
         }
     }
@@ -309,10 +314,12 @@ struct CursorAwareTextEditor: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             parent.cursorPosition = textView.selectedRange.location
+            parent.selectedRange = textView.selectedRange
         }
         
         func textViewDidChangeSelection(_ textView: UITextView) {
             parent.cursorPosition = textView.selectedRange.location
+            parent.selectedRange = textView.selectedRange
         }
     }
 }
@@ -320,6 +327,7 @@ struct CursorAwareTextEditor: UIViewRepresentable {
 struct MarkdownToolbar: View {
     @Binding var content: String
     @Binding var cursorPosition: Int
+    @Binding var selectedRange: NSRange
     
     private let markdownButtons = [
         MarkdownButton(symbol: "bold", title: "太字", prefix: "**", suffix: "**"),
@@ -379,6 +387,7 @@ struct MarkdownToolbar: View {
         if content.isEmpty {
             content = prefix
             cursorPosition = prefix.count
+            selectedRange = NSRange(location: prefix.count, length: 0)
         } else {
             // カーソル位置から現在の行の開始位置を探す
             let lines = content.components(separatedBy: .newlines)
@@ -403,6 +412,7 @@ struct MarkdownToolbar: View {
                 
                 content = beforeCursor + prefix + afterCursor
                 cursorPosition = lineStartPosition + prefix.count
+                selectedRange = NSRange(location: cursorPosition, length: 0)
             } else {
                 // 新しい行として追加
                 if !content.hasSuffix("\n") {
@@ -411,6 +421,7 @@ struct MarkdownToolbar: View {
                 let insertPosition = content.count
                 content += prefix
                 cursorPosition = insertPosition + prefix.count
+                selectedRange = NSRange(location: cursorPosition, length: 0)
             }
         }
     }
@@ -419,29 +430,63 @@ struct MarkdownToolbar: View {
         if content.isEmpty {
             content = prefix + suffix
             cursorPosition = prefix.count
+            selectedRange = NSRange(location: prefix.count, length: 0)
         } else {
-            // カーソル位置にMarkdown記法を挿入
-            let insertPosition = min(cursorPosition, content.count)
-            let beforeCursor = String(content.prefix(insertPosition))
-            let afterCursor = String(content.suffix(from: content.index(content.startIndex, offsetBy: insertPosition)))
-            
-            var insertText: String
-            var newCursorOffset: Int
-            
-            if prefix == "[" && suffix == "](url)" {
-                insertText = prefix + "リンクテキスト" + suffix
-                newCursorOffset = prefix.count // "["の後にカーソルを配置
-            } else if prefix == "`" && suffix == "`" {
-                insertText = prefix + "コード" + suffix
-                newCursorOffset = prefix.count // "`"の後にカーソルを配置
+            // 選択範囲がある場合は選択テキストを囲む
+            if selectedRange.length > 0 {
+                let startIndex = content.index(content.startIndex, offsetBy: selectedRange.location)
+                let endIndex = content.index(content.startIndex, offsetBy: selectedRange.location + selectedRange.length)
+                let selectedText = String(content[startIndex..<endIndex])
+                
+                let beforeSelection = String(content.prefix(selectedRange.location))
+                let afterSelection = String(content.suffix(content.count - selectedRange.location - selectedRange.length))
+                
+                let wrappedText = prefix + selectedText + suffix
+                content = beforeSelection + wrappedText + afterSelection
+                
+                // 選択範囲を更新（記法で囲まれた内側のテキストを選択状態に）
+                let newLocation = selectedRange.location + prefix.count
+                selectedRange = NSRange(location: newLocation, length: selectedText.count)
+                cursorPosition = newLocation + selectedText.count
             } else {
-                insertText = prefix + "テキスト" + suffix
-                newCursorOffset = prefix.count // prefixの後にカーソルを配置
+                // 選択範囲がない場合は従来の動作
+                let insertPosition = min(cursorPosition, content.count)
+                let beforeCursor = String(content.prefix(insertPosition))
+                let afterCursor = String(content.suffix(from: content.index(content.startIndex, offsetBy: insertPosition)))
+                
+                var insertText: String
+                var defaultText: String
+                var newCursorOffset: Int
+                
+                if prefix == "[" && suffix == "](url)" {
+                    defaultText = "リンクテキスト"
+                    insertText = prefix + defaultText + suffix
+                    newCursorOffset = prefix.count
+                } else if prefix == "`" && suffix == "`" {
+                    defaultText = "コード"
+                    insertText = prefix + defaultText + suffix
+                    newCursorOffset = prefix.count
+                } else if prefix == "**" {
+                    defaultText = "太字テキスト"
+                    insertText = prefix + defaultText + suffix
+                    newCursorOffset = prefix.count
+                } else if prefix == "*" {
+                    defaultText = "斜体テキスト"
+                    insertText = prefix + defaultText + suffix
+                    newCursorOffset = prefix.count
+                } else {
+                    defaultText = "テキスト"
+                    insertText = prefix + defaultText + suffix
+                    newCursorOffset = prefix.count
+                }
+                
+                content = beforeCursor + insertText + afterCursor
+                
+                // デフォルトテキストを選択状態にする
+                let newLocation = insertPosition + prefix.count
+                selectedRange = NSRange(location: newLocation, length: defaultText.count)
+                cursorPosition = newLocation + defaultText.count
             }
-            
-            content = beforeCursor + insertText + afterCursor
-            let newCursorPosition = insertPosition + newCursorOffset
-            cursorPosition = newCursorPosition
         }
     }
     
@@ -450,6 +495,7 @@ struct MarkdownToolbar: View {
         guard !lines.isEmpty else {
             content = "  "
             cursorPosition = 2
+            selectedRange = NSRange(location: 2, length: 0)
             return
         }
         
@@ -469,6 +515,7 @@ struct MarkdownToolbar: View {
             
             // カーソル位置を調整（2文字分右に移動）
             cursorPosition += 2
+            selectedRange = NSRange(location: cursorPosition, length: 0)
         }
     }
     
@@ -499,6 +546,7 @@ struct MarkdownToolbar: View {
             
             // カーソル位置を調整（削除した文字数分左に移動）
             cursorPosition = max(0, cursorPosition - removedSpaces)
+            selectedRange = NSRange(location: cursorPosition, length: 0)
         }
     }
     
@@ -506,6 +554,7 @@ struct MarkdownToolbar: View {
         if content.isEmpty {
             content = "```\nコード\n```"
             cursorPosition = 4 // "```\n"の後にカーソルを配置
+            selectedRange = NSRange(location: 4, length: 2) // "コード"を選択状態に
         } else {
             // カーソル位置にコードブロックを挿入
             let insertPosition = min(cursorPosition, content.count)
@@ -523,10 +572,11 @@ struct MarkdownToolbar: View {
             }
             
             content = beforeCursor + insertText + afterCursor
-            // "```\n"の後（"コード"の位置）にカーソルを配置
+            // "```\n"の後（"コード"の位置）にカーソルを配置し、"コード"を選択状態に
             let newlineOffset = beforeCursor.hasSuffix("\n") ? 0 : 1
             let newCursorPosition = insertPosition + newlineOffset + 4 // "```\n"の長さ
             cursorPosition = newCursorPosition
+            selectedRange = NSRange(location: newCursorPosition, length: 2) // "コード"を選択状態に
         }
     }
     
@@ -578,7 +628,7 @@ struct MarkdownPreviewView: View {
                             .fontWeight(.bold)
                     case .italic:
                         Text(element.content)
-                            .italic()
+                            .font(.system(.body).italic())
                     case .code:
                         Text(element.content)
                             .font(.system(.body, design: .monospaced))
@@ -611,8 +661,8 @@ struct MarkdownPreviewView: View {
                                 Text(bulletMarker(for: element.indentLevel))
                                     .foregroundColor(.secondary)
                             }
-                            Text(element.content)
-                                .fixedSize(horizontal: false, vertical: true)
+                            // リストアイテム内のインライン記法を解析して表示
+                            renderInlineMarkdown(element.content)
                         }
                     case .numberedList:
                         HStack(alignment: .top, spacing: 8) {
@@ -625,8 +675,8 @@ struct MarkdownPreviewView: View {
                                     .foregroundColor(.secondary)
                                     .frame(minWidth: 24, alignment: .trailing)
                             }
-                            Text(element.content)
-                                .fixedSize(horizontal: false, vertical: true)
+                            // リストアイテム内のインライン記法を解析して表示
+                            renderInlineMarkdown(element.content)
                         }
                     case .quote:
                         HStack(alignment: .top, spacing: 8) {
@@ -634,7 +684,7 @@ struct MarkdownPreviewView: View {
                                 .fill(Color.secondary)
                                 .frame(width: 3)
                             Text(element.content)
-                                .italic()
+                                .font(.system(.body).italic())
                                 .foregroundColor(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -687,6 +737,42 @@ struct MarkdownPreviewView: View {
                            "xi", "xii", "xiii", "xiv", "xv", "xvi", "xvii", "xviii", "xix", "xx"]
         guard number > 0 && number < romanNumerals.count else { return "i" }
         return romanNumerals[number]
+    }
+    
+    @ViewBuilder
+    private func renderInlineMarkdown(_ text: String) -> some View {
+        let inlineElements = parseInlineMarkdown(text, indentLevel: 0)
+        
+        if inlineElements.count == 1 && inlineElements.first?.type == .paragraph {
+            // 単純なテキストの場合
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            // インライン記法が含まれる場合
+            HStack(spacing: 0) {
+                ForEach(inlineElements, id: \.id) { element in
+                    switch element.type {
+                    case .bold:
+                        Text(element.content)
+                            .fontWeight(.bold)
+                    case .italic:
+                        Text(element.content)
+                            .font(.system(.body).italic())
+                    case .inlineCode:
+                        Text(element.content)
+                            .font(.system(.body, design: .monospaced))
+                            .padding(.horizontal, 4)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(2)
+                    case .paragraph:
+                        Text(element.content)
+                    default:
+                        Text(element.content)
+                    }
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
     }
     
     private func parseMarkdown(_ text: String) -> [MarkdownElement] {
@@ -804,16 +890,68 @@ struct MarkdownPreviewView: View {
     }
     
     private func parseTextFormatting(_ text: String, indentLevel: Int) -> [MarkdownElement] {
-        // 太字と斜体の処理を改善
-        if text.contains("**") {
-            let content = text.replacingOccurrences(of: "**", with: "")
-            return [MarkdownElement(type: .bold, content: content, indentLevel: indentLevel)]
-        } else if text.contains("*") {
-            let content = text.replacingOccurrences(of: "*", with: "")
-            return [MarkdownElement(type: .italic, content: content, indentLevel: indentLevel)]
-        } else {
+        var elements: [MarkdownElement] = []
+        var currentText = text
+        
+        // 太字の処理（**text**）
+        while currentText.contains("**") {
+            let components = currentText.components(separatedBy: "**")
+            if components.count >= 3 {
+                // **より前の通常テキスト
+                if !components[0].isEmpty {
+                    elements.append(MarkdownElement(type: .paragraph, content: components[0], indentLevel: indentLevel))
+                }
+                
+                // **で囲まれた太字テキスト
+                if !components[1].isEmpty {
+                    elements.append(MarkdownElement(type: .bold, content: components[1], indentLevel: indentLevel))
+                }
+                
+                // 残りのテキストを再度処理
+                currentText = components.dropFirst(2).joined(separator: "**")
+            } else {
+                break
+            }
+        }
+        
+        // 斜体の処理（*text*）- 太字処理後の残りテキストで実行
+        if currentText.contains("*") && !currentText.contains("**") {
+            let components = currentText.components(separatedBy: "*")
+            if components.count >= 3 {
+                var tempText = ""
+                for (index, component) in components.enumerated() {
+                    if index % 2 == 0 {
+                        // 通常のテキスト
+                        tempText += component
+                    } else {
+                        // *で囲まれた斜体テキスト
+                        if !tempText.isEmpty {
+                            elements.append(MarkdownElement(type: .paragraph, content: tempText, indentLevel: indentLevel))
+                            tempText = ""
+                        }
+                        if !component.isEmpty {
+                            elements.append(MarkdownElement(type: .italic, content: component, indentLevel: indentLevel))
+                        }
+                    }
+                }
+                if !tempText.isEmpty {
+                    elements.append(MarkdownElement(type: .paragraph, content: tempText, indentLevel: indentLevel))
+                }
+                currentText = ""
+            }
+        }
+        
+        // 残りの通常テキスト
+        if !currentText.isEmpty {
+            elements.append(MarkdownElement(type: .paragraph, content: currentText, indentLevel: indentLevel))
+        }
+        
+        // 空の要素があった場合は単純な段落として返す
+        if elements.isEmpty {
             return [MarkdownElement(type: .paragraph, content: text, indentLevel: indentLevel)]
         }
+        
+        return elements
     }
 }
 
