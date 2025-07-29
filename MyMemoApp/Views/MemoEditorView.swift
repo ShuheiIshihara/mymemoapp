@@ -621,10 +621,11 @@ struct MarkdownPreviewView: View {
                                 ForEach(0..<element.indentLevel, id: \.self) { _ in
                                     Spacer().frame(width: 20)
                                 }
-                                Text(element.content.components(separatedBy: " ").first ?? "1.")
+                                Text(formatNumber(element.number ?? 1, for: element.indentLevel))
                                     .foregroundColor(.secondary)
+                                    .frame(minWidth: 24, alignment: .trailing)
                             }
-                            Text(element.content.components(separatedBy: " ").dropFirst().joined(separator: " "))
+                            Text(element.content)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     case .quote:
@@ -657,9 +658,41 @@ struct MarkdownPreviewView: View {
         }
     }
     
+    private func formatNumber(_ number: Int, for indentLevel: Int) -> String {
+        switch indentLevel {
+        case 0:
+            // 1層目: 算用数字
+            return "\(number)."
+        case 1:
+            // 2層目: アルファベット小文字
+            return "\(numberToAlphabet(number))."
+        case 2:
+            // 3層目: ローマ数字小文字
+            return "\(numberToRoman(number))."
+        default:
+            // 4層目以降: 算用数字
+            return "\(number)."
+        }
+    }
+    
+    private func numberToAlphabet(_ number: Int) -> String {
+        guard number > 0 && number <= 26 else { return "a" }
+        let alphabet = "abcdefghijklmnopqrstuvwxyz"
+        let index = alphabet.index(alphabet.startIndex, offsetBy: number - 1)
+        return String(alphabet[index])
+    }
+    
+    private func numberToRoman(_ number: Int) -> String {
+        let romanNumerals = ["", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x",
+                           "xi", "xii", "xiii", "xiv", "xv", "xvi", "xvii", "xviii", "xix", "xx"]
+        guard number > 0 && number < romanNumerals.count else { return "i" }
+        return romanNumerals[number]
+    }
+    
     private func parseMarkdown(_ text: String) -> [MarkdownElement] {
         let lines = text.components(separatedBy: .newlines)
         var elements: [MarkdownElement] = []
+        var numberedListCounters: [Int: Int] = [:] // インデントレベルごとの番号管理
         var i = 0
         
         while i < lines.count {
@@ -692,24 +725,46 @@ struct MarkdownPreviewView: View {
                 }
                 
                 elements.append(MarkdownElement(type: .codeBlock, content: codeContent, indentLevel: 0))
+                // リストの番号をリセット
+                numberedListCounters.removeAll()
             } else if trimmedLine.hasPrefix("### ") {
                 elements.append(MarkdownElement(type: .heading3, content: String(trimmedLine.dropFirst(4)), indentLevel: 0))
+                numberedListCounters.removeAll()
             } else if trimmedLine.hasPrefix("## ") {
                 elements.append(MarkdownElement(type: .heading2, content: String(trimmedLine.dropFirst(3)), indentLevel: 0))
+                numberedListCounters.removeAll()
             } else if trimmedLine.hasPrefix("# ") {
                 elements.append(MarkdownElement(type: .heading1, content: String(trimmedLine.dropFirst(2)), indentLevel: 0))
+                numberedListCounters.removeAll()
             } else if trimmedLine.hasPrefix("> ") {
                 elements.append(MarkdownElement(type: .quote, content: String(trimmedLine.dropFirst(2)), indentLevel: 0))
+                numberedListCounters.removeAll()
             } else if trimmedLine.hasPrefix("- ") {
                 elements.append(MarkdownElement(type: .bulletList, content: String(trimmedLine.dropFirst(2)), indentLevel: indentLevel))
+                numberedListCounters.removeAll()
             } else if trimmedLine.range(of: #"^\d+\. "#, options: .regularExpression) != nil {
-                elements.append(MarkdownElement(type: .numberedList, content: trimmedLine, indentLevel: indentLevel))
+                // 番号付きリストの処理
+                let content = trimmedLine.replacingOccurrences(of: #"^\d+\. "#, with: "", options: .regularExpression)
+                
+                // 現在のインデントレベルの番号を取得・更新
+                let currentNumber = (numberedListCounters[indentLevel] ?? 0) + 1
+                numberedListCounters[indentLevel] = currentNumber
+                
+                // より深いレベルの番号をリセット
+                let keysToRemove = numberedListCounters.keys.filter { $0 > indentLevel }
+                for key in keysToRemove {
+                    numberedListCounters.removeValue(forKey: key)
+                }
+                
+                elements.append(MarkdownElement(type: .numberedList, content: content, indentLevel: indentLevel, number: currentNumber))
             } else if trimmedLine.hasPrefix("```") && trimmedLine.hasSuffix("```") && trimmedLine.count > 6 {
                 let content = String(trimmedLine.dropFirst(3).dropLast(3))
                 elements.append(MarkdownElement(type: .code, content: content, indentLevel: 0))
+                numberedListCounters.removeAll()
             } else if !trimmedLine.isEmpty {
                 // インライン記法の処理
                 elements.append(contentsOf: parseInlineMarkdown(trimmedLine, indentLevel: 0))
+                numberedListCounters.removeAll()
             }
             
             i += 1
@@ -767,6 +822,14 @@ struct MarkdownElement {
     let type: MarkdownType
     let content: String
     let indentLevel: Int
+    let number: Int? // 番号付きリスト用の番号
+    
+    init(type: MarkdownType, content: String, indentLevel: Int, number: Int? = nil) {
+        self.type = type
+        self.content = content
+        self.indentLevel = indentLevel
+        self.number = number
+    }
     
     enum MarkdownType {
         case heading1, heading2, heading3
