@@ -663,6 +663,9 @@ struct MarkdownPreviewView: View {
                     case .italic:
                         Text(element.content)
                             .font(.system(.body).italic())
+                    case .strikethrough:
+                        Text(element.content)
+                            .strikethrough()
                     case .code:
                         Text(element.content)
                             .font(.system(.body, design: .monospaced))
@@ -723,6 +726,42 @@ struct MarkdownPreviewView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(.leading, 8)
+                    case .link:
+                        let components = element.content.components(separatedBy: "|")
+                        if components.count == 2 {
+                            Link(components[0], destination: URL(string: components[1]) ?? URL(string: "https://example.com")!)
+                                .foregroundColor(.blue)
+                        } else {
+                            Text(element.content)
+                                .foregroundColor(.blue)
+                        }
+                    case .image:
+                        let components = element.content.components(separatedBy: "|")
+                        if components.count == 2 {
+                            AsyncImage(url: URL(string: components[1])) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            } placeholder: {
+                                VStack {
+                                    Image(systemName: "photo")
+                                        .foregroundColor(.secondary)
+                                    Text(components[0].isEmpty ? "画像" : components[0])
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding()
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(4)
+                            }
+                            .frame(maxHeight: 300)
+                        } else {
+                            Text(element.content)
+                                .foregroundColor(.secondary)
+                        }
+                    case .table:
+                        // HTMLテーブルを簡単なGridで表示
+                        TableView(htmlContent: element.content)
                     case .paragraph:
                         Text(element.content)
                             .fixedSize(horizontal: false, vertical: true)
@@ -792,12 +831,48 @@ struct MarkdownPreviewView: View {
                     case .italic:
                         Text(element.content)
                             .font(.system(.body).italic())
+                    case .strikethrough:
+                        Text(element.content)
+                            .strikethrough()
                     case .inlineCode:
                         Text(element.content)
                             .font(.system(.body, design: .monospaced))
                             .padding(.horizontal, 4)
                             .background(Color.gray.opacity(0.1))
                             .cornerRadius(2)
+                    case .link:
+                        let components = element.content.components(separatedBy: "|")
+                        if components.count == 2 {
+                            Link(components[0], destination: URL(string: components[1]) ?? URL(string: "https://example.com")!)
+                                .foregroundColor(.blue)
+                        } else {
+                            Text(element.content)
+                                .foregroundColor(.blue)
+                        }
+                    case .image:
+                        let components = element.content.components(separatedBy: "|")
+                        if components.count == 2 {
+                            AsyncImage(url: URL(string: components[1])) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            } placeholder: {
+                                VStack {
+                                    Image(systemName: "photo")
+                                        .foregroundColor(.secondary)
+                                    Text(components[0].isEmpty ? "画像" : components[0])
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding()
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(4)
+                            }
+                            .frame(maxHeight: 300)
+                        } else {
+                            Text(element.content)
+                                .foregroundColor(.secondary)
+                        }
                     case .paragraph:
                         Text(element.content)
                     default:
@@ -881,6 +956,18 @@ struct MarkdownPreviewView: View {
                 let content = String(trimmedLine.dropFirst(3).dropLast(3))
                 elements.append(MarkdownElement(type: .code, content: content, indentLevel: 0))
                 numberedListCounters.removeAll()
+            } else if trimmedLine.contains("|") {
+                // テーブル行の処理
+                let (tableHTML, nextIndex) = parseTableBlock(lines, startIndex: i)
+                if !tableHTML.isEmpty {
+                    elements.append(MarkdownElement(type: .table, content: tableHTML, indentLevel: 0))
+                    i = nextIndex - 1 // ループで i += 1 されるので -1
+                    numberedListCounters.removeAll()
+                } else {
+                    // テーブルとして解析できない場合は通常の段落として処理
+                    elements.append(contentsOf: parseInlineMarkdown(trimmedLine, indentLevel: 0))
+                    numberedListCounters.removeAll()
+                }
             } else if !trimmedLine.isEmpty {
                 // インライン記法の処理
                 elements.append(contentsOf: parseInlineMarkdown(trimmedLine, indentLevel: 0))
@@ -891,6 +978,63 @@ struct MarkdownPreviewView: View {
         }
         
         return elements
+    }
+    
+    private func parseTableBlock(_ lines: [String], startIndex: Int) -> (String, Int) {
+        var tableRows: [String] = []
+        var currentIndex = startIndex
+        
+        // テーブル行を連続して収集
+        while currentIndex < lines.count {
+            let line = lines[currentIndex].trimmingCharacters(in: .whitespaces)
+            
+            // パイプを含む行かつ、最低2つのパイプがある（列区切り）
+            if line.contains("|") && line.components(separatedBy: "|").count >= 3 {
+                tableRows.append(line)
+                currentIndex += 1
+            } else if !line.isEmpty {
+                break // 空行でない非テーブル行に到達したら終了
+            } else {
+                currentIndex += 1 // 空行はスキップして続行
+            }
+        }
+        
+        // 最低2行必要（ヘッダー行 + データ行）
+        if tableRows.count < 2 {
+            return ("", startIndex + 1)
+        }
+        
+        // テーブルHTMLを生成
+        var html = "<table>"
+        
+        for (index, row) in tableRows.enumerated() {
+            let cells = row.components(separatedBy: "|")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            
+            if index == 0 {
+                // ヘッダー行
+                html += "<thead><tr>"
+                for cell in cells {
+                    html += "<th>\(cell)</th>"
+                }
+                html += "</tr></thead><tbody>"
+            } else if index == 1 && cells.allSatisfy({ $0.allSatisfy { $0 == "-" || $0 == ":" || $0.isWhitespace } }) {
+                // アライメント行（:---: や ---など）は無視
+                continue
+            } else {
+                // データ行
+                html += "<tr>"
+                for cell in cells {
+                    html += "<td>\(cell)</td>"
+                }
+                html += "</tr>"
+            }
+        }
+        
+        html += "</tbody></table>"
+        
+        return (html, currentIndex)
     }
     
     private func calculateIndentLevel(_ line: String) -> Int {
@@ -948,7 +1092,105 @@ struct MarkdownPreviewView: View {
             }
         }
         
-        // 斜体の処理（*text*）- 太字処理後の残りテキストで実行
+        // 取り消し線の処理（~~text~~）
+        while currentText.contains("~~") {
+            let components = currentText.components(separatedBy: "~~")
+            if components.count >= 3 {
+                if !components[0].isEmpty {
+                    elements.append(MarkdownElement(type: .paragraph, content: components[0], indentLevel: indentLevel))
+                }
+                
+                if !components[1].isEmpty {
+                    elements.append(MarkdownElement(type: .strikethrough, content: components[1], indentLevel: indentLevel))
+                }
+                
+                currentText = components.dropFirst(2).joined(separator: "~~")
+            } else {
+                break
+            }
+        }
+        
+        // 画像の処理（![alt](url)）
+        let imagePattern = #"!\[([^\]]*)\]\(([^)]+)\)"#
+        if let regex = try? NSRegularExpression(pattern: imagePattern, options: []) {
+            let matches = regex.matches(in: currentText, options: [], range: NSRange(currentText.startIndex..., in: currentText))
+            
+            if !matches.isEmpty {
+                var processedText = ""
+                var lastEnd = currentText.startIndex
+                
+                for match in matches {
+                    let matchRange = Range(match.range, in: currentText)!
+                    let altRange = Range(match.range(at: 1), in: currentText)!
+                    let urlRange = Range(match.range(at: 2), in: currentText)!
+                    
+                    // マッチより前のテキスト
+                    let beforeText = String(currentText[lastEnd..<matchRange.lowerBound])
+                    if !beforeText.isEmpty {
+                        processedText += beforeText
+                    }
+                    
+                    // 画像のaltテキストとURL
+                    let altText = String(currentText[altRange])
+                    let imageURL = String(currentText[urlRange])
+                    
+                    // 画像要素として追加
+                    if !processedText.isEmpty {
+                        elements.append(MarkdownElement(type: .paragraph, content: processedText, indentLevel: indentLevel))
+                        processedText = ""
+                    }
+                    elements.append(MarkdownElement(type: .image, content: "\(altText)|\(imageURL)", indentLevel: indentLevel))
+                    
+                    lastEnd = matchRange.upperBound
+                }
+                
+                // 残りのテキスト
+                let remainingText = String(currentText[lastEnd...])
+                currentText = remainingText
+            }
+        }
+        
+        // リンクの処理（[text](url)）
+        let linkPattern = #"\[([^\]]+)\]\(([^)]+)\)"#
+        if let regex = try? NSRegularExpression(pattern: linkPattern, options: []) {
+            let matches = regex.matches(in: currentText, options: [], range: NSRange(currentText.startIndex..., in: currentText))
+            
+            if !matches.isEmpty {
+                var processedText = ""
+                var lastEnd = currentText.startIndex
+                
+                for match in matches {
+                    let matchRange = Range(match.range, in: currentText)!
+                    let textRange = Range(match.range(at: 1), in: currentText)!
+                    let urlRange = Range(match.range(at: 2), in: currentText)!
+                    
+                    // マッチより前のテキスト
+                    let beforeText = String(currentText[lastEnd..<matchRange.lowerBound])
+                    if !beforeText.isEmpty {
+                        processedText += beforeText
+                    }
+                    
+                    // リンクテキストとURL
+                    let linkText = String(currentText[textRange])
+                    let linkURL = String(currentText[urlRange])
+                    
+                    // リンク要素として追加
+                    if !processedText.isEmpty {
+                        elements.append(MarkdownElement(type: .paragraph, content: processedText, indentLevel: indentLevel))
+                        processedText = ""
+                    }
+                    elements.append(MarkdownElement(type: .link, content: "\(linkText)|\(linkURL)", indentLevel: indentLevel))
+                    
+                    lastEnd = matchRange.upperBound
+                }
+                
+                // 残りのテキスト
+                let remainingText = String(currentText[lastEnd...])
+                currentText = remainingText
+            }
+        }
+        
+        // 斜体の処理（*text*）- 他の処理後の残りテキストで実行
         if currentText.contains("*") && !currentText.contains("**") {
             let components = currentText.components(separatedBy: "*")
             if components.count >= 3 {
@@ -1005,11 +1247,87 @@ struct MarkdownElement {
     
     enum MarkdownType {
         case heading1, heading2, heading3
-        case bold, italic
+        case bold, italic, strikethrough
         case code, inlineCode, codeBlock
         case bulletList, numberedList
         case quote
+        case link, image
+        case table
         case paragraph
+    }
+}
+
+struct TableView: View {
+    let htmlContent: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            let tableData = parseHTMLTable(htmlContent)
+            
+            if !tableData.isEmpty {
+                ForEach(0..<tableData.count, id: \.self) { rowIndex in
+                    HStack(spacing: 0) {
+                        ForEach(0..<tableData[rowIndex].count, id: \.self) { colIndex in
+                            Text(tableData[rowIndex][colIndex])
+                                .font(rowIndex == 0 ? .system(.body, weight: .semibold) : .body)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(rowIndex == 0 ? Color.gray.opacity(0.1) : Color.clear)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
+                                )
+                        }
+                    }
+                }
+            } else {
+                Text("テーブルを解析できませんでした")
+                    .foregroundColor(.secondary)
+                    .padding()
+            }
+        }
+        .background(Color.white)
+        .cornerRadius(4)
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    private func parseHTMLTable(_ html: String) -> [[String]] {
+        var rows: [[String]] = []
+        
+        // HTMLテーブルから行を抽出
+        let rowPattern = #"<tr[^>]*>(.*?)</tr>"#
+        let cellPattern = #"<t[hd][^>]*>(.*?)</t[hd]>"#
+        
+        guard let rowRegex = try? NSRegularExpression(pattern: rowPattern, options: .dotMatchesLineSeparators),
+              let cellRegex = try? NSRegularExpression(pattern: cellPattern, options: .dotMatchesLineSeparators) else {
+            return []
+        }
+        
+        let rowMatches = rowRegex.matches(in: html, options: [], range: NSRange(html.startIndex..., in: html))
+        
+        for rowMatch in rowMatches {
+            let rowRange = Range(rowMatch.range(at: 1), in: html)!
+            let rowContent = String(html[rowRange])
+            
+            let cellMatches = cellRegex.matches(in: rowContent, options: [], range: NSRange(rowContent.startIndex..., in: rowContent))
+            var cells: [String] = []
+            
+            for cellMatch in cellMatches {
+                let cellRange = Range(cellMatch.range(at: 1), in: rowContent)!
+                let cellContent = String(rowContent[cellRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+                cells.append(cellContent)
+            }
+            
+            if !cells.isEmpty {
+                rows.append(cells)
+            }
+        }
+        
+        return rows
     }
 }
 
