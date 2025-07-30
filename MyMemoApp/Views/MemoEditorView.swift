@@ -24,6 +24,8 @@ struct MemoEditorView: View {
     @State private var cursorPosition: Int = 0
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @State private var isCancelled = false
+    @State private var showingExportSheet = false
+    @StateObject private var exportManager = ExportManager()
     
     // 変更検知用の初期値
     private let originalTitle: String
@@ -155,14 +157,28 @@ struct MemoEditorView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("保存") {
-                        saveMemo()
+                    HStack {
+                        Button(action: {
+                            showingExportSheet = true
+                        }) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        
+                        Button("保存") {
+                            saveMemo()
+                        }
+                        .fontWeight(.semibold)
                     }
-                    .fontWeight(.semibold)
                 }
             }
             .sheet(isPresented: $showingGroupPicker) {
                 GroupPickerView(selectedGroupId: $selectedGroupId)
+            }
+            .sheet(isPresented: $showingExportSheet) {
+                ExportSheetView(
+                    memo: createExportableMemo(),
+                    exportManager: exportManager
+                )
             }
             .onDisappear {
                 autoSaveIfNeeded()
@@ -210,6 +226,24 @@ struct MemoEditorView: View {
         
         if shouldAutoSave() {
             saveChanges()
+        }
+    }
+    
+    private func createExportableMemo() -> ExportableMemo {
+        if let existingMemo = memo {
+            // 既存メモの場合は現在の編集状態で ExportableMemo を作成
+            return ExportableMemo(
+                title: title,
+                content: content,
+                createdAt: existingMemo.createdAt,
+                updatedAt: existingMemo.updatedAt
+            )
+        } else {
+            // 新規メモの場合
+            return ExportableMemo(
+                title: title,
+                content: content
+            )
         }
     }
 }
