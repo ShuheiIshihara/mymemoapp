@@ -79,12 +79,11 @@ struct ExportSheetView: View {
                         ExportFormatButton(
                             icon: "doc.richtext",
                             title: "PDF形式",
-                            description: "印刷可能なPDFファイル（近日対応予定）",
+                            description: "印刷可能なPDFファイル",
                             format: .pdf,
-                            isExporting: isExporting,
-                            isDisabled: true
+                            isExporting: isExporting
                         ) {
-                            // PDFは後で実装
+                            exportMemo(format: .pdf)
                         }
                     }
                 }
@@ -102,7 +101,10 @@ struct ExportSheetView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingShareSheet) {
+        .sheet(isPresented: $showingShareSheet, onDismiss: {
+            // ShareSheetが閉じられた時にExportSheetも閉じる
+            dismiss()
+        }) {
             if let url = shareURL {
                 ShareSheet(activityItems: [url])
             }

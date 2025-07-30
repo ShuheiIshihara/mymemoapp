@@ -10,6 +10,8 @@ import UniformTypeIdentifiers
 
 class ExportManager: ObservableObject {
     
+    private let pdfGenerator = PDFGenerator()
+    
     enum ExportFormat {
         case markdown
         case pdf
@@ -60,9 +62,33 @@ class ExportManager: ObservableObject {
     
     /// エクスポート可能メモをエクスポート
     func exportExportableMemo(_ memo: ExportableMemo, format: ExportFormat) throws -> URL {
-        let content = generateContent(for: memo, format: format)
-        let filename = generateFilename(for: memo, format: format)
-        return try createTemporaryFile(content: content, filename: filename)
+        switch format {
+        case .pdf:
+            return try exportMemoAsPDF(memo)
+        default:
+            let content = generateContent(for: memo, format: format)
+            let filename = generateFilename(for: memo, format: format)
+            return try createTemporaryFile(content: content, filename: filename)
+        }
+    }
+    
+    /// PDFとしてメモをエクスポート
+    private func exportMemoAsPDF(_ memo: ExportableMemo) throws -> URL {
+        do {
+            let pdfData = try pdfGenerator.generatePDF(from: memo)
+            let filename = generateFilename(for: memo, format: .pdf)
+            return try createTemporaryFile(data: pdfData, filename: filename)
+        } catch let error as PDFGenerator.PDFError {
+            // PDFGenerator のエラーを ExportManager のエラーにマップ
+            switch error {
+            case .htmlConversionFailed, .invalidContent:
+                throw ExportError.invalidContent
+            case .pdfGenerationFailed:
+                throw ExportError.fileCreationFailed
+            }
+        } catch {
+            throw ExportError.fileCreationFailed
+        }
     }
     
     /// 複数メモをエクスポート
@@ -93,8 +119,8 @@ class ExportManager: ObservableObject {
         case .text:
             return generateTextContent(for: memo)
         case .pdf:
-            // PDFは後で実装
-            return generateMarkdownContent(for: memo)
+            // PDFは直接データ生成なので、ここでは使用しない
+            return ""
         }
     }
     
@@ -263,6 +289,18 @@ class ExportManager: ObservableObject {
         
         do {
             try content.write(to: fileURL, atomically: true, encoding: .utf8)
+            return fileURL
+        } catch {
+            throw ExportError.fileCreationFailed
+        }
+    }
+    
+    private func createTemporaryFile(data: Data, filename: String) throws -> URL {
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let fileURL = tempDirectory.appendingPathComponent(filename)
+        
+        do {
+            try data.write(to: fileURL)
             return fileURL
         } catch {
             throw ExportError.fileCreationFailed
