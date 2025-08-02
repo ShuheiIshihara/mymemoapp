@@ -72,7 +72,7 @@ class MarkdownToHTMLConverter {
             } else if trimmedLine.hasPrefix("> ") {
                 elements.append(MarkdownElement(type: .quote, content: String(trimmedLine.dropFirst(2)), indentLevel: 0))
                 numberedListCounters.removeAll()
-            } else if trimmedLine.hasPrefix("- ") {
+            } else if trimmedLine.hasPrefix("- ") || trimmedLine.hasPrefix("* ") {
                 elements.append(MarkdownElement(type: .bulletList, content: String(trimmedLine.dropFirst(2)), indentLevel: indentLevel))
                 numberedListCounters.removeAll()
             } else if trimmedLine.range(of: #"^\d+\. "#, options: .regularExpression) != nil {
@@ -89,6 +89,10 @@ class MarkdownToHTMLConverter {
             } else if trimmedLine.hasPrefix("```") && trimmedLine.hasSuffix("```") && trimmedLine.count > 6 {
                 let content = String(trimmedLine.dropFirst(3).dropLast(3))
                 elements.append(MarkdownElement(type: .code, content: content, indentLevel: 0))
+                numberedListCounters.removeAll()
+            } else if trimmedLine.range(of: #"^-{3,}$"#, options: .regularExpression) != nil {
+                // 水平線（3つ以上のハイフン）
+                elements.append(MarkdownElement(type: .horizontalRule, content: "", indentLevel: 0))
                 numberedListCounters.removeAll()
             } else if trimmedLine.contains("|") {
                 // テーブル行の処理
@@ -462,6 +466,8 @@ class MarkdownToHTMLConverter {
             }
         case .table:
             return element.content // HTMLテーブルはそのまま返す
+        case .horizontalRule:
+            return "<hr>"
         case .paragraph:
             return "<p>\(escapeHTML(element.content))</p>"
         }
@@ -668,6 +674,12 @@ class MarkdownToHTMLConverter {
                 
                 tr:nth-child(even) {
                     background-color: #f9fafb;
+                }
+                
+                hr {
+                    border: none;
+                    border-top: 1px solid #e5e5e5;
+                    margin: 16px 0;
                 }
             </style>
         </head>

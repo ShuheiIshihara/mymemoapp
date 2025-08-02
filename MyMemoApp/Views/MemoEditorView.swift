@@ -542,7 +542,7 @@ struct MarkdownToolbar: View {
         
         // 現在の行がリスト項目またはインデント可能な行の場合のみインデント
         let trimmed = currentLine.trimmingCharacters(in: .whitespaces)
-        if trimmed.hasPrefix("- ") || trimmed.range(of: #"^\d+\. "#, options: .regularExpression) != nil || trimmed.isEmpty {
+        if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.range(of: #"^\d+\. "#, options: .regularExpression) != nil || trimmed.isEmpty {
             // 2スペースを先頭に追加
             modifiedLines[currentLineIndex] = "  " + currentLine
             content = modifiedLines.joined(separator: "\n")
@@ -762,6 +762,11 @@ struct MarkdownPreviewView: View {
                     case .table:
                         // HTMLテーブルを簡単なGridで表示
                         TableView(htmlContent: element.content)
+                    case .horizontalRule:
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.5))
+                            .frame(height: 1)
+                            .padding(.vertical, 8)
                     case .paragraph:
                         Text(element.content)
                             .fixedSize(horizontal: false, vertical: true)
@@ -934,7 +939,7 @@ struct MarkdownPreviewView: View {
             } else if trimmedLine.hasPrefix("> ") {
                 elements.append(MarkdownElement(type: .quote, content: String(trimmedLine.dropFirst(2)), indentLevel: 0))
                 numberedListCounters.removeAll()
-            } else if trimmedLine.hasPrefix("- ") {
+            } else if trimmedLine.hasPrefix("- ") || trimmedLine.hasPrefix("* ") {
                 elements.append(MarkdownElement(type: .bulletList, content: String(trimmedLine.dropFirst(2)), indentLevel: indentLevel))
                 numberedListCounters.removeAll()
             } else if trimmedLine.range(of: #"^\d+\. "#, options: .regularExpression) != nil {
@@ -955,6 +960,10 @@ struct MarkdownPreviewView: View {
             } else if trimmedLine.hasPrefix("```") && trimmedLine.hasSuffix("```") && trimmedLine.count > 6 {
                 let content = String(trimmedLine.dropFirst(3).dropLast(3))
                 elements.append(MarkdownElement(type: .code, content: content, indentLevel: 0))
+                numberedListCounters.removeAll()
+            } else if trimmedLine.range(of: #"^-{3,}$"#, options: .regularExpression) != nil {
+                // 水平線（3つ以上のハイフン）
+                elements.append(MarkdownElement(type: .horizontalRule, content: "", indentLevel: 0))
                 numberedListCounters.removeAll()
             } else if trimmedLine.contains("|") {
                 // テーブル行の処理
@@ -1253,6 +1262,7 @@ struct MarkdownElement {
         case quote
         case link, image
         case table
+        case horizontalRule
         case paragraph
     }
 }
