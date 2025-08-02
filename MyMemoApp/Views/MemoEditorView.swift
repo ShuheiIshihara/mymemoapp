@@ -24,6 +24,7 @@ struct MemoEditorView: View {
     @State private var cursorPosition: Int = 0
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
     @State private var isCancelled = false
+    @State private var isSaved = false
     @State private var showingExportSheet = false
     @StateObject private var exportManager = ExportManager()
     
@@ -193,6 +194,7 @@ struct MemoEditorView: View {
     
     private func saveMemo() {
         saveChanges()
+        isSaved = true
         dismiss()
     }
     
@@ -220,7 +222,7 @@ struct MemoEditorView: View {
     }
     
     private func autoSaveIfNeeded() {
-        if isCancelled {
+        if isCancelled || isSaved {
             return
         }
         

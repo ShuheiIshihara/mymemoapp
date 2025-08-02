@@ -357,6 +357,7 @@ struct GroupHeaderView: View {
 
 struct SearchBar: View {
     @Binding var text: String
+    @FocusState private var isSearchFocused: Bool
     
     var body: some View {
         HStack {
@@ -365,8 +366,27 @@ struct SearchBar: View {
             
             TextField("メモを検索", text: $text)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                .focused($isSearchFocused)
+            
+            if !text.isEmpty {
+                Button(action: {
+                    text = ""
+                    isSearchFocused = false
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+            }
         }
         .padding(.vertical, 8)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完了") {
+                    isSearchFocused = false
+                }
+            }
+        }
     }
 }
 
