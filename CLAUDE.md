@@ -1,17 +1,9 @@
 # CLAUDE.md
 
-このファイルは、Claude Code (claude.ai/code) がこのリポジトリで作業する際のガイダンスを提供します。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## プロジェクト概要
-Swift + SwiftUI + Swift Dataで構築されたiOS Markdownメモアプリ。グループ機能、ゴミ箱、エクスポート、同期機能を含む完全版として開発。
-
-## アーキテクチャ
-- **MyMemoApp/**: メインアプリモジュール
-  - `MyMemoAppApp.swift`: アプリエントリーポイント
-  - `ContentView.swift`: メインUI（現在プレースホルダー）
-  - `Model/Memo.swift`: コアデータモデル
-- **MyMemoAppTests/**: ユニットテスト
-- **MyMemoAppUITests/**: UIテスト
+Swift + SwiftUI + Swift Dataで構築されたiOS Markdownメモアプリ。完全版として開発済み。
 
 ## 開発コマンド
 ```bash
@@ -25,69 +17,107 @@ xcodebuild -project MyMemoApp.xcodeproj -scheme MyMemoApp test
 open MyMemoApp.xcodeproj
 ```
 
-## 現在の開発状況
-- **完了**: Xcodeプロジェクト設定、基本Memoモデル
-- **次のステップ**: 完全版データモデル実装（グループ、ゴミ箱対応）
+## アーキテクチャ
 
-## フルバージョン機能
-### 主要機能
-- **基本メモ機能**: CRUD操作、タイトル + Markdownコンテンツ編集
-- **グループ機能**: 手動カテゴリ設定、アコーディオン式表示
-- **ゴミ箱機能**: 論理削除、復元・完全削除機能
-- **エクスポート機能**: PDF・Markdown形式、単一メモ対象
-- **表形式変換**: タブ区切りテキスト、専用モーダル入力
-- **オフライン対応**: ローカルキャッシュ、同期機能
-- **設定画面**: 表示設定、テーマ設定、エクスポート設定
+### データ層アーキテクチャ
+- **Swift Data**: Core Data後継の永続化フレームワーク使用
+- **DataManager**: シングルトンパターンでSwift Dataコンテナと操作を管理
+- **Model**: `Memo`と`Group`の@Modelクラス、論理削除対応
+- **依存性注入**: `@environmentObject`でDataManagerをView階層に注入
+
+### UI層アーキテクチャ  
+- **TabView**: 4つのメインタブ（メモ・グループ・ゴミ箱・設定）
+- **NavigationStack**: iOS16+の新しいナビゲーション方式採用
+- **MVVM**: @StateObject/@ObservedObjectでリアクティブなUI更新
+
+### エクスポートアーキテクチャ
+- **ExportManager**: エクスポート機能の統合管理
+- **MarkdownToHTMLConverter**: Markdown → HTML変換、包括的記法サポート
+- **PDFGenerator**: UIKit PrintPageRendererを使用したPDF生成
+- **ExportableMemo**: Swift Dataメモリ管理問題を回避する安全なデータ構造
+
+### Markdownレンダリングアーキテクチャ
+- **二段階パース**: parseMarkdown → parseTextFormatting
+- **MarkdownElement**: 型安全なMarkdown要素表現
+- **renderInlineMarkdown**: SwiftUIでのMarkdown表示ロジック
+- **processListElements**: 階層リスト用の専用処理
+
+## 現在の実装状況
+- ✅ 完全なタブベースUI
+- ✅ Swift Dataによるデータ永続化
+- ✅ グループ機能（CRUD操作）
+- ✅ ゴミ箱機能（論理削除・復元）
+- ✅ 包括的Markdownサポート（見出し・太字・斜体・取り消し線・リンク・画像・テーブル・リスト・引用・コード）
+- ✅ エクスポート機能（Markdown・テキスト・PDF）
+- ✅ 検索機能
+- ✅ リアルタイムプレビュー機能
 
 ## データモデル
-完全版データスキーマ:
 
-### メモテーブル (Memo)
+### Swift Data Models
 ```swift
-- id: UUID（プライマリキー）
-- title: String（32文字制限）
-- content: String（Markdownコンテンツ）
-- groupId: UUID?（グループID、NULL許可）
-- createdAt: Date
-- updatedAt: Date
-- deletedAt: Date?（ゴミ箱用論理削除）
+@Model
+class Memo {
+    var id: UUID
+    var title: String          // 32文字制限
+    var content: String        // Markdownコンテンツ
+    var groupId: UUID?         // オプショナル、グループ未分類可能 
+    var createdAt: Date
+    var updatedAt: Date
+    var deletedAt: Date?       // 論理削除用
+}
+
+@Model  
+class Group {
+    var id: UUID
+    var name: String           // グループ名
+    var createdAt: Date
+    var updatedAt: Date
+    var deletedAt: Date?       // 論理削除用
+}
 ```
 
-### グループテーブル (Group)
-```swift
-- id: UUID（プライマリキー）
-- name: String（手動設定）
-- createdAt: Date
-- updatedAt: Date
-- deletedAt: Date?（論理削除）
+### DataManager Pattern
+- シングルトン設計（`DataManager.shared`）
+- `@MainActor`でメインスレッド保証
+- CRUD操作の集約化
+- 論理削除・復元ロジック
+- 検索機能（title・content両方対象）
+
+## Markdown機能
+
+### サポート記法
+```markdown
+# 見出し1-3
+**太字** *斜体* ~~取り消し線~~
+`インラインコード`
+```複数行コード```
+- 箇条書き（階層対応）
+1. 番号付きリスト（階層対応）
+> 引用
+[リンクテキスト](URL)  
+![画像説明](画像URL)
+| 列1 | 列2 |（テーブル）
 ```
 
-## UI設計仕様
-### 画面構成（タブバー型）
-1. **メモ一覧**: アコーディオン式グループ表示
-2. **グループ管理**: グループCRUD操作
-3. **ゴミ箱**: 削除メモ管理
-4. **設定**: アプリ設定
+### レンダリング詳細
+- **階層リスト**: 1.→a.→i.→1. の番号付け
+- **画像**: AsyncImage、最大高さ300px
+- **テーブル**: HTML生成→SwiftUIでパース表示
+- **リンク**: タップ可能なLink View
 
-### 編集画面仕様
-- **表示**: タブ切り替え（編集/プレビュー）
-- **クイックプレビュー**: 長押しで一時プレビュー
-- **遷移**: プッシュ遷移
-- **保存**: 手動保存
-- **操作**: 長押しでコンテキストメニュー
+## エクスポート機能
 
-### 詳細仕様
-- **日時表示**: 「2025/07/16 15:30」形式
-- **アコーディオン**: 起動時は閉じた状態
-- **タイトル制限**: 32文字まで
-- **文字数制限**: 本文は制限なし
+### サポート形式
+- **Markdown形式**: 元記法保持、メタデータ付き
+- **テキスト形式**: 記法除去済みプレーンテキスト  
+- **PDF形式**: A4、ヘッダー・フッター・スタイル付き
 
-## 開発ステップ
-1. ✅ プロジェクト設定と基本Memoモデル
-2. 🔄 完全版データモデル実装（Memo + Group）
-3. 📱 タブバー式UI実装
-4. 📝 Markdownレンダリング
-5. 🗂️ グループ・ゴミ箱機能実装
-6. 📤 エクスポート・表形式変換実装
-7. ⚙️ 設定画面実装
-8. 🔄 Supabase同期実装
+### PDF生成フロー
+1. Markdown → HTML変換（MarkdownToHTMLConverter）
+2. HTML → PDF変換（UIKit PrintPageRenderer）
+3. 一時ファイル作成 → iOS標準シェア機能
+
+### エクスポート後のUX
+- シェアシート表示
+- シェア完了/キャンセル後に編集画面へ自動復帰
