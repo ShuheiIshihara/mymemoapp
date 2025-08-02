@@ -893,6 +893,7 @@ struct MarkdownPreviewView: View {
         let lines = text.components(separatedBy: .newlines)
         var elements: [MarkdownElement] = []
         var numberedListCounters: [Int: Int] = [:] // インデントレベルごとの番号管理
+        var headingCounters: [Int: Int] = [:] // 見出しレベルごとの番号管理
         var i = 0
         
         while i < lines.count {
@@ -928,13 +929,28 @@ struct MarkdownPreviewView: View {
                 // リストの番号をリセット
                 numberedListCounters.removeAll()
             } else if trimmedLine.hasPrefix("### ") {
-                elements.append(MarkdownElement(type: .heading3, content: String(trimmedLine.dropFirst(4)), indentLevel: 0))
+                // H3見出しの処理
+                let currentNumber = (headingCounters[3] ?? 0) + 1
+                headingCounters[3] = currentNumber
+                let numberedTitle = formatHeadingNumber(level: 3, counters: headingCounters) + String(trimmedLine.dropFirst(4))
+                elements.append(MarkdownElement(type: .heading3, content: numberedTitle, indentLevel: 0))
                 numberedListCounters.removeAll()
             } else if trimmedLine.hasPrefix("## ") {
-                elements.append(MarkdownElement(type: .heading2, content: String(trimmedLine.dropFirst(3)), indentLevel: 0))
+                // H2見出しの処理
+                let currentNumber = (headingCounters[2] ?? 0) + 1
+                headingCounters[2] = currentNumber
+                headingCounters.removeValue(forKey: 3) // H3カウンターリセット
+                let numberedTitle = formatHeadingNumber(level: 2, counters: headingCounters) + String(trimmedLine.dropFirst(3))
+                elements.append(MarkdownElement(type: .heading2, content: numberedTitle, indentLevel: 0))
                 numberedListCounters.removeAll()
             } else if trimmedLine.hasPrefix("# ") {
-                elements.append(MarkdownElement(type: .heading1, content: String(trimmedLine.dropFirst(2)), indentLevel: 0))
+                // H1見出しの処理
+                let currentNumber = (headingCounters[1] ?? 0) + 1
+                headingCounters[1] = currentNumber
+                headingCounters.removeValue(forKey: 2) // H2カウンターリセット
+                headingCounters.removeValue(forKey: 3) // H3カウンターリセット
+                let numberedTitle = formatHeadingNumber(level: 1, counters: headingCounters) + String(trimmedLine.dropFirst(2))
+                elements.append(MarkdownElement(type: .heading1, content: numberedTitle, indentLevel: 0))
                 numberedListCounters.removeAll()
             } else if trimmedLine.hasPrefix("> ") {
                 elements.append(MarkdownElement(type: .quote, content: String(trimmedLine.dropFirst(2)), indentLevel: 0))
@@ -1237,6 +1253,24 @@ struct MarkdownPreviewView: View {
         }
         
         return elements
+    }
+    
+    private func formatHeadingNumber(level: Int, counters: [Int: Int]) -> String {
+        switch level {
+        case 1:
+            return "\(counters[1] ?? 1). "
+        case 2:
+            let h1 = counters[1] ?? 1
+            let h2 = counters[2] ?? 1
+            return "\(h1).\(h2). "
+        case 3:
+            let h1 = counters[1] ?? 1
+            let h2 = counters[2] ?? 1
+            let h3 = counters[3] ?? 1
+            return "\(h1).\(h2).\(h3). "
+        default:
+            return ""
+        }
     }
 }
 
