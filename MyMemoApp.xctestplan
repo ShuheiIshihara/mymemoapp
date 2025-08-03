@@ -1,0 +1,37 @@
+{
+  "configurations" : [
+    {
+      "id" : "1AA792A8-D68B-4678-88A5-B7B407BDE995",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:MyMemoApp.xcodeproj",
+      "identifier" : "858DF0582E27C83F004CD342",
+      "name" : "MyMemoApp"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:MyMemoApp.xcodeproj",
+        "identifier" : "858DF0652E27C842004CD342",
+        "name" : "MyMemoAppTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:MyMemoApp.xcodeproj",
+        "identifier" : "858DF06F2E27C842004CD342",
+        "name" : "MyMemoAppUITests"
+      }
+    }
+  ],
+  "version" : 1
+}
