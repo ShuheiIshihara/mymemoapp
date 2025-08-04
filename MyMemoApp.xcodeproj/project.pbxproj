@@ -24,6 +24,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		851AD67D2E3E6D7A004FD99B /* MyMemoApp.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = MyMemoApp.xctestplan; sourceTree = "<group>"; };
 		858DF0592E27C83F004CD342 /* MyMemoApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MyMemoApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		858DF0662E27C842004CD342 /* MyMemoAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyMemoAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		858DF0702E27C842004CD342 /* MyMemoAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyMemoAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,6 +76,7 @@
 		858DF0502E27C83F004CD342 = {
 			isa = PBXGroup;
 			children = (
+				851AD67D2E3E6D7A004FD99B /* MyMemoApp.xctestplan */,
 				858DF05B2E27C83F004CD342 /* MyMemoApp */,
 				858DF0692E27C842004CD342 /* MyMemoAppTests */,
 				858DF0732E27C842004CD342 /* MyMemoAppUITests */,
@@ -528,7 +530,7 @@
 				858DF0792E27C842004CD342 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		858DF07A2E27C842004CD342 /* Build configuration list for PBXNativeTarget "MyMemoApp" */ = {
 			isa = XCConfigurationList;
@@ -537,7 +539,7 @@
 				858DF07C2E27C842004CD342 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		858DF07D2E27C842004CD342 /* Build configuration list for PBXNativeTarget "MyMemoAppTests" */ = {
 			isa = XCConfigurationList;
@@ -546,7 +548,7 @@
 				858DF07F2E27C842004CD342 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 		858DF0802E27C842004CD342 /* Build configuration list for PBXNativeTarget "MyMemoAppUITests" */ = {
 			isa = XCConfigurationList;
@@ -555,7 +557,7 @@
 				858DF0822E27C842004CD342 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
