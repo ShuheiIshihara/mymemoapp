@@ -20,6 +20,12 @@ class MarkdownToHTMLConverter {
         )
     }
     
+    // テスト用のパブリックメソッド
+    func convertToHTML(_ markdown: String) -> String {
+        let htmlContent = convertMarkdownToHTML(markdown)
+        return generateFullHTML(title: "Test", content: htmlContent, createdAt: Date(), updatedAt: Date())
+    }
+    
     private func convertMarkdownToHTML(_ markdown: String) -> String {
         let elements = parseMarkdown(markdown)
         return processListElements(elements)

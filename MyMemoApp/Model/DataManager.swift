@@ -26,6 +26,12 @@ class DataManager: ObservableObject {
         }
     }
     
+    // テスト用イニシャライザ
+    internal init(container: ModelContainer) {
+        self.container = container
+        self.context = container.mainContext
+    }
+    
     // MARK: - Memo Operations
     
     func createMemo(title: String, content: String = "", groupId: UUID? = nil) -> Memo {
